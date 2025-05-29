@@ -8,11 +8,9 @@ $ python main.py -i /Volumes/Projects/eMail/code/test_box/mbox -o /Volumes/Proje
 ```
 
 ## Built With \- [Python](https://www.python.org/)
-<<<<<<< HEAD
 =======
 This script was built on Python.
 ChatGPT wrote almost all of it.
->>>>>>> 4cd45ef (Readme updated)
 
 ## Install
 Download the repository, e.g., to your Git directory. Use pip to install it into your Python environment.
