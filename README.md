@@ -29,6 +29,7 @@ Show the options.
 ### Conversion
 To convert an MBOX file to JSON, provide the MBOX file path. Output JSON file would be in
 the same location as the input file. 
+You can run the command from command line (be sure to activate your python environment, e.g. ``conda activate myenv``)
 ```
 mbox-to-json -i /Users/david/mail/mailbox.mbox
 ``` 

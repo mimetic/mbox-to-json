@@ -131,6 +131,11 @@ def compress_image(input_path, output_path, max_size=2048, quality=60):
 def write_to_disk(part, file_path, compress=False):
     """Write attachment to disk with optional compression"""
     content = part.get_payload(decode=True)
+    if content is None:
+        return None
+    
+    # Create parent directories if they don't exist
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
     
     # Write original file first
     with open(file_path, 'wb') as f:
@@ -275,6 +280,19 @@ def extract_attachments_for_message(msg, output_folder, mid, compress_images=Fal
         )
         if not is_attachment:
             continue
+            
+        # Skip .asc files
+        if name and name.lower().endswith('.asc'):
+            continue
+            
+        # Skip small images (less than 1KB)
+        content = part.get_payload(decode=True)
+        if content is None:
+            continue
+            
+        # Check if it's an image and size is less than 1KB
+        if (part.get_content_type().startswith('image/') and len(content) < 1024):
+            continue
 
         counter += 1
         num_str = f"{counter}"
@@ -285,7 +303,8 @@ def extract_attachments_for_message(msg, output_folder, mid, compress_images=Fal
 
         dest = resolve_name_conflicts(output_folder, prefixed, existing, counter)
         final_path = write_to_disk(part, dest, compress=compress_images)
-        files.append(os.path.basename(final_path))
+        if final_path:  # Only add to files list if attachment was successfully written
+            files.append(os.path.basename(final_path))
 
     return files
 # ——————————————————————————————————————————————————————————————————————
@@ -294,8 +313,8 @@ def extract_attachments_for_message(msg, output_folder, mid, compress_images=Fal
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument('-i','--input',  default='all.mbox')
-    p.add_argument('-o','--output-json', default='out.json')
-    p.add_argument('-a','--attachments-dir', default=None, help='Directory for attachments. If not specified, will be created in same directory as output JSON.')
+    p.add_argument('-o','--output-json', default=None, help='Path to output JSON file. If not specified, will be created in same directory as input mbox file.')
+    p.add_argument('-a','--attachments-dir', default=None, help='Directory for attachments. If not specified, will be created in same directory as input mbox file.')
     p.add_argument('--compress-images', action='store_true', help='Compress images and PDFs larger than 1MB to JPEG format (max 2048px, quality 60)')
     p.add_argument('-v', '--version', action='version', version=f'mbox-to-json {__version__}', help='Show program version and exit')
     return p.parse_args()
@@ -304,15 +323,21 @@ def parse_args():
 def main():
     args = parse_args()
 
-    # If attachments directory not specified, put it in same directory as output JSON
+    # Get the directory of the input mbox file
+    input_dir = os.path.dirname(args.input)
+    if input_dir == '':
+        input_dir = '.'  # If no directory specified, use current directory
+    
+    # If output JSON not specified, create it in same directory as input mbox file
+    if args.output_json is None:
+        # Get the basename of the input file without extension
+        input_basename = os.path.splitext(os.path.basename(args.input))[0]
+        args.output_json = os.path.join(input_dir, f"{input_basename}.json")
+    
+    # If attachments directory not specified, create it in same directory as input mbox file
     if args.attachments_dir is None:
-        # Get the directory of the output JSON file
-        output_dir = os.path.dirname(args.output_json)
-        if output_dir == '':
-            output_dir = '.'  # If no directory specified, use current directory
-        
-        # Create 'attachments' folder in that directory
-        args.attachments_dir = os.path.join(output_dir, 'attachments')
+        # Create 'attachments' folder in the input directory
+        args.attachments_dir = os.path.join(input_dir, 'attachments')
     
     # prepare output folder for attachments
     os.makedirs(args.attachments_dir, exist_ok=True)
