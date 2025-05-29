@@ -10,6 +10,18 @@ import html2text
 import email.utils
 from email.header import decode_header
 from alive_progress import alive_bar
+import mimetypes
+try:
+    from PIL import Image
+    HAS_PIL = True
+except ImportError:
+    HAS_PIL = False
+
+try:
+    import pdf2image
+    HAS_PDF2IMAGE = True
+except ImportError:
+    HAS_PDF2IMAGE = False
 
 
 # ——————————————————————————————————————————————————————————————————————
@@ -50,9 +62,125 @@ def resolve_name_conflicts(folder, name, existing_paths, att_num):
     existing_paths.add(os.path.normcase(path))
     return path
 
-def write_to_disk(part, file_path):
+def get_mime_type(content_type, filename):
+    """Get standardized MIME type from content type and filename"""
+    mime_type = content_type.lower().split(';')[0].strip()
+    if not mime_type or mime_type == 'application/octet-stream':
+        # Try to guess from filename if content_type is generic
+        guessed_type, _ = mimetypes.guess_type(filename)
+        if guessed_type:
+            mime_type = guessed_type
+    return mime_type
+
+def should_compress_file(file_path, mime_type):
+    """Check if file should be compressed based on size and type"""
+    if not os.path.exists(file_path):
+        return False
+    file_size = os.path.getsize(file_path)
+    return (file_size > 1024 * 1024 and  # 1MB
+            (mime_type.startswith('image/') or mime_type == 'application/pdf'))
+
+def convert_pdf_to_image(pdf_path, output_path):
+    """Convert first page of PDF to image using pdf2image"""
+    if not HAS_PDF2IMAGE:
+        print(f"Warning: pdf2image not available. Cannot convert PDF: {pdf_path}")
+        return False
+    
+    try:
+        images = pdf2image.convert_from_path(pdf_path, first_page=1, last_page=1)
+        if images and len(images) > 0:
+            images[0].save(output_path, 'JPEG')
+            return True
+        return False
+    except Exception as e:
+        print(f"Failed to convert PDF {pdf_path}: {str(e)}")
+        return False
+
+def compress_image(input_path, output_path, max_size=2048, quality=60):
+    """Compress image using PIL while maintaining aspect ratio"""
+    if not HAS_PIL:
+        print(f"Warning: PIL not available. Cannot compress image: {input_path}")
+        return False
+    
+    try:
+        with Image.open(input_path) as img:
+            # Convert RGBA to RGB if necessary
+            if img.mode in ('RGBA', 'LA'):
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                background.paste(img, mask=img.split()[-1])
+                img = background
+            elif img.mode != 'RGB':
+                img = img.convert('RGB')
+            
+            # Calculate new dimensions
+            ratio = min(max_size/max(img.size[0], img.size[1]), 1.0)
+            new_size = tuple(int(dim * ratio) for dim in img.size)
+            
+            # Resize and save
+            img = img.resize(new_size, Image.LANCZOS)
+            img.save(output_path, 'JPEG', quality=quality, optimize=True)
+        return True
+    except Exception as e:
+        print(f"Failed to compress image {input_path}: {str(e)}")
+        return False
+
+def write_to_disk(part, file_path, compress=False):
+    """Write attachment to disk with optional compression"""
+    content = part.get_payload(decode=True)
+    
+    # Write original file first
     with open(file_path, 'wb') as f:
-        f.write(part.get_payload(decode=True))
+        f.write(content)
+    
+    if not compress:
+        return file_path
+    
+    # Get MIME type for compression decision
+    mime_type = get_mime_type(part.get_content_type(), file_path)
+    
+    if should_compress_file(file_path, mime_type):
+        # Prepare paths for compressed files
+        base_path, ext = os.path.splitext(file_path)
+        compressed_path = f"{base_path}_compressed.jpg"
+        
+        # Handle PDFs
+        if mime_type == 'application/pdf' and HAS_PDF2IMAGE:
+            pdf_success = convert_pdf_to_image(file_path, compressed_path)
+            if pdf_success:
+                # Further compress the converted image if it's still large
+                if os.path.getsize(compressed_path) > 1024 * 1024:
+                    temp_path = f"{base_path}_temp.jpg"
+                    os.rename(compressed_path, temp_path)
+                    if compress_image(temp_path, compressed_path):
+                        os.remove(temp_path)
+                        os.remove(file_path)  # Remove original PDF if compression successful
+                        print(f"Compressed PDF: {os.path.basename(file_path)} → {os.path.basename(compressed_path)}")
+                        return compressed_path
+                    else:
+                        # If second compression failed, use the first converted image
+                        os.rename(temp_path, compressed_path)
+                        os.remove(file_path)
+                        return compressed_path
+                else:
+                    # PDF was converted and is small enough
+                    os.remove(file_path)  # Remove original if conversion successful
+                    print(f"Converted PDF: {os.path.basename(file_path)} → {os.path.basename(compressed_path)}")
+                    return compressed_path
+        
+        # Handle regular images
+        elif mime_type.startswith('image/') and HAS_PIL:
+            if compress_image(file_path, compressed_path):
+                # Only keep compressed version if it's actually smaller
+                if os.path.getsize(compressed_path) < os.path.getsize(file_path):
+                    os.remove(file_path)  # Remove original if compression successful
+                    print(f"Compressed image: {os.path.basename(file_path)} → {os.path.basename(compressed_path)}")
+                    return compressed_path
+                else:
+                    # Compressed version isn't smaller, keep original
+                    os.remove(compressed_path)
+                    
+    # Return original path if no compression happened
+    return file_path
 
 
 def extract_body(msg):
@@ -112,11 +240,14 @@ def extract_body(msg):
     else:
         return ""
 
-def extract_attachments_for_message(msg, output_folder, mid):
+def extract_attachments_for_message(msg, output_folder, mid, compress_images=False):
     """
     Walks a single email.message.Message, saves each attachment
     prefixed with its cleaned Message-ID, and returns a list of
     the filenames actually written.
+    
+    If compress_images is True, images and PDFs larger than 1MB will be 
+    compressed to JPEG format with a maximum dimension of 2048px.
     """
     files = []
     existing = set()
@@ -149,8 +280,8 @@ def extract_attachments_for_message(msg, output_folder, mid):
         prefixed = f"{clean_id} {fname}"
 
         dest = resolve_name_conflicts(output_folder, prefixed, existing, counter)
-        write_to_disk(part, dest)
-        files.append(os.path.basename(dest))
+        final_path = write_to_disk(part, dest, compress=compress_images)
+        files.append(os.path.basename(final_path))
 
     return files
 # ——————————————————————————————————————————————————————————————————————
@@ -161,6 +292,7 @@ def parse_args():
     p.add_argument('-i','--input',  default='all.mbox')
     p.add_argument('-o','--output-json', default='out.json')
     p.add_argument('--attachments-dir', default=None, help='Directory for attachments. If not specified, will be created in same directory as output JSON.')
+    p.add_argument('--compress-images', action='store_true', help='Compress images and PDFs larger than 1MB to JPEG format (max 2048px, quality 60)')
     return p.parse_args()
 
 
@@ -211,7 +343,8 @@ def main():
             attached_files = extract_attachments_for_message(
                 msg,
                 args.attachments_dir,
-                idx
+                idx,
+                compress_images=args.compress_images
             )
             if attached_files:
                 record['attachments'] = attached_files
