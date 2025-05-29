@@ -15,9 +15,9 @@ ChatGPT wrote almost all of it.
 >>>>>>> 4cd45ef (Readme updated)
 
 ## Install
-Download the repository, go to the directory, and use pip to install it into your Python environment (while first upgrading pip).
+Download the repository, e.g., to your Git directory. Use pip to install it into your Python environment.
 ```
-pip install --upgrade pip
+pip install /Users/david/Git/mbox-to-json
 ```  
 
 ## Usage \- Help Function 
