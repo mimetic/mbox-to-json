@@ -8,6 +8,10 @@ import re
 import pandas as pd
 import html2text
 import email.utils
+import sys
+
+# Package version
+__version__ = '1.1.0'
 from email.header import decode_header
 from alive_progress import alive_bar
 import mimetypes
@@ -293,6 +297,7 @@ def parse_args():
     p.add_argument('-o','--output-json', default='out.json')
     p.add_argument('--attachments-dir', default=None, help='Directory for attachments. If not specified, will be created in same directory as output JSON.')
     p.add_argument('--compress-images', action='store_true', help='Compress images and PDFs larger than 1MB to JPEG format (max 2048px, quality 60)')
+    p.add_argument('-v', '--version', action='version', version=f'mbox-to-json {__version__}', help='Show program version and exit')
     return p.parse_args()
 
 
