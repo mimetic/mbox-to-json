@@ -7,6 +7,7 @@ import argparse
 import re
 import pandas as pd
 import html2text
+import email.utils
 from email.header import decode_header
 from alive_progress import alive_bar
 
@@ -176,18 +177,25 @@ def main():
     with alive_bar(len(mbox)) as bar:
         for idx, msg in enumerate(mbox):
             # --- your existing code to turn headers/body into a dict record ---
+            from_header = msg.get('From', '')
+            display_name, email_addr = email.utils.parseaddr(from_header)
+            
+            # Normalize display name (remove extra spaces, etc.)
+            display_name = ' '.join(display_name.split())
+            
             record = {
-                'From': msg.get('From'),
-                'To':   msg.get('To'),
-                'Subject': msg.get('Subject'),
-                'Date': msg.get('Date'),
+                'from': from_header,
+                'to': msg.get('To'),
+                'subject': msg.get('Subject'),
+                'date': msg.get('Date'),
+                'display-name': display_name,
                 # etc…
             }
             
             # Extract email body and convert to markdown if HTML
             body_content = extract_body(msg)
             if body_content:
-                record['Body'] = body_content
+                record['body'] = body_content
 
             # --- now extract attachments for this message ---
             attached_files = extract_attachments_for_message(
@@ -196,7 +204,7 @@ def main():
                 idx
             )
             if attached_files:
-                record['Attachments'] = attached_files
+                record['attachments'] = attached_files
 
             mbox_dict[idx] = record
             bar()
