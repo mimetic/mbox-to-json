@@ -137,9 +137,26 @@ def save(extractor, mid, part, attachments_counter, inline_image=False):
             attachment_number_string = str(attachments_counter['value'])
             destination_folder = extractor.options.output
 
-        filename = decode_filename(part, attachment_number_string, mid)
-        filename = filter_fn_characters(filename)
-        filename = '%s %s' % (mid, filename)
+    #    filename = decode_filename(part, attachment_number_string, mid)
+    #    filename = filter_fn_characters(filename)
+    #    filename = '%s %s' % (mid, filename)
+
+    # ————————————————————————————————————————————————————————————————————
+    # Use the actual Message-ID header (minus “<” “>”) as our prefix
+    raw_msg_id = extractor.mbox.get_message(mid).get('Message-ID', '')
+    # strip surrounding angle-brackets, if any
+    clean_msg_id = raw_msg_id.strip().lstrip('<').rstrip('>')
+    # fallback to numeric mid if header was missing
+    if not clean_msg_id:
+        clean_msg_id = str(mid)
+
+    filename = decode_filename(part, attachment_number_string, mid)
+    filename = filter_fn_characters(filename)
+    # now prefix with the cleaned-up Message-ID
+    filename = f"{clean_msg_id} {filename}"
+    # ————————————————————————————————————————————————————————————————————
+
+
 
         previous_file_paths = attachments_counter['file_paths']
 
