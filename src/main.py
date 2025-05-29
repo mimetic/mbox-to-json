@@ -160,13 +160,23 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument('-i','--input',  default='all.mbox')
     p.add_argument('-o','--output-json', default='out.json')
-    p.add_argument('--attachments-dir', default='attachments/')
+    p.add_argument('--attachments-dir', default=None, help='Directory for attachments. If not specified, will be created in same directory as output JSON.')
     return p.parse_args()
 
 
 def main():
     args = parse_args()
 
+    # If attachments directory not specified, put it in same directory as output JSON
+    if args.attachments_dir is None:
+        # Get the directory of the output JSON file
+        output_dir = os.path.dirname(args.output_json)
+        if output_dir == '':
+            output_dir = '.'  # If no directory specified, use current directory
+        
+        # Create 'attachments' folder in that directory
+        args.attachments_dir = os.path.join(output_dir, 'attachments')
+    
     # prepare output folder for attachments
     os.makedirs(args.attachments_dir, exist_ok=True)
 
