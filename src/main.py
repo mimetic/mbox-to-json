@@ -11,7 +11,7 @@ import email.utils
 import sys
 
 # Package version
-__version__ = '1.1.0'
+__version__ = '1.1.2'
 from email.header import decode_header
 from alive_progress import alive_bar
 import mimetypes
@@ -366,6 +366,22 @@ def main():
             
             # Extract email body and convert to markdown if HTML
             body_content = extract_body(msg)
+
+            # ✱ NEW: skip messages that have no usable body ✱
+            if not body_content or not body_content.strip():
+                bar()          # advance the progress bar
+                continue       # ignore this message completely
+            
+            record = {
+                'from': from_header,
+                'to': msg.get('To'),
+                'subject': msg.get('Subject'),
+                'date': msg.get('Date'),
+                'display-name': display_name,
+                'body': body_content,   # from here on we know body_content is non-empty
+            }
+            
+            # double-check, probably not necessary:
             if body_content:
                 record['body'] = body_content
 
