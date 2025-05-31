@@ -13,7 +13,7 @@ import email.utils
 import sys
 
 # Package version
-__version__ = '1.2.0'
+__version__ = '1.2.5'
 
 from email.header import decode_header
 from alive_progress import alive_bar
@@ -502,7 +502,8 @@ def main():
         args.output_json = os.path.join(input_dir, f"{base}.json")
 
     if args.attachments_dir is None:
-        args.attachments_dir = os.path.join(input_dir, 'attachments')
+        base = os.path.splitext(os.path.basename(args.input))[0]
+        args.attachments_dir = os.path.join(input_dir, f"{base}_attachments")
 
     os.makedirs(args.attachments_dir, exist_ok=True)
 

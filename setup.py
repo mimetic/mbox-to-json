@@ -9,7 +9,7 @@ long_description = (this_directory / "README.md").read_text()
 
 setup(
 		name ='mbox-to-json',
-		version ='1.2.0',
+		version ='1.2.5',
 		author ='David Gross, Prakhar Sharma, Adrita Bhattacharya, ChatGPT',
 		author_email ='prakharsharma1607@gmail.com',
 		url ='https://github.com/mimetic/mbox-to-json',
